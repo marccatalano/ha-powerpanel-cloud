@@ -1,0 +1,13 @@
+{
+  "domain": "powerpanel_cloud",
+  "name": "CyberPower PowerPanel Cloud",
+  "version": "1.0.0",
+  "documentation": "https://github.com/your-repo/ha-powerpanel-cloud",
+  "issue_tracker": "https://github.com/your-repo/ha-powerpanel-cloud/issues",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": [],
+  "config_flow": true,
+  "iot_class": "cloud_polling",
+  "homeassistant": "2024.1.0"
+}

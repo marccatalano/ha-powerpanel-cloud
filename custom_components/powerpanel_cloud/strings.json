@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to PowerPanel Cloud",
+        "description": "Enter your PowerPanel Cloud account credentials.",
+        "data": {
+          "email": "Email Address",
+          "password": "Password",
+          "scan_interval": "Poll Interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password.",
+      "cannot_connect": "Could not connect to PowerPanel Cloud. Check your network.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This PowerPanel Cloud account is already configured."
+    }
+  }
+}
