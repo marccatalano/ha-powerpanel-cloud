@@ -8,6 +8,5 @@
   "dependencies": [],
   "codeowners": ["@marccatalano"],
   "config_flow": true,
-  "iot_class": "cloud_polling",
-  "homeassistant": "2024.1.0"
+  "iot_class": "cloud_polling"
 }
