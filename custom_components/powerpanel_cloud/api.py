@@ -60,7 +60,7 @@ class PowerPanelAPIClient:
             ) as resp:
                 if resp.status != 200:
                     raise PowerPanelAuthError(f"HTTP {resp.status}")
-                data = await resp.json(content_type=None)
+                data = await self._parse_json(resp, context="authenticate")
         except aiohttp.ClientError as err:
             raise PowerPanelConnectionError(str(err)) from err
 
@@ -84,6 +84,37 @@ class PowerPanelAPIClient:
             "Content-Type": "application/json",
         }
 
+    async def _parse_json(self, resp: aiohttp.ClientResponse, *, context: str) -> dict:
+        """Parse a response body as JSON, logging enough detail to diagnose failures.
+
+        The PowerPanel Cloud API doesn't always return JSON on error (empty body,
+        an HTML/redirect page, a plain-text message, etc). Previously we called
+        resp.json() unconditionally, which threw an unhandled JSONDecodeError and
+        crashed the coordinator instead of surfacing something diagnosable.
+        """
+        raw = await resp.text()
+        if not raw.strip():
+            _LOGGER.error(
+                "%s: empty response body (HTTP %s) from %s",
+                context, resp.status, resp.url,
+            )
+            raise PowerPanelConnectionError(
+                f"{context}: empty response body (HTTP {resp.status})"
+            )
+        try:
+            # content_type=None: PowerPanel Cloud doesn't reliably send
+            # application/json, so don't let aiohttp reject on that basis.
+            return await resp.json(content_type=None)
+        except ValueError as err:
+            snippet = raw[:300]
+            _LOGGER.error(
+                "%s: non-JSON response (HTTP %s) from %s: %s",
+                context, resp.status, resp.url, snippet,
+            )
+            raise PowerPanelConnectionError(
+                f"{context}: non-JSON response (HTTP {resp.status}): {snippet}"
+            ) from err
+
     async def _post(self, path: str, payload: dict) -> dict:
         """POST to iotapi with Bearer token."""
         try:
@@ -100,8 +131,14 @@ class PowerPanelAPIClient:
                         json=payload,
                         headers=self._auth_headers(),
                     ) as resp2:
-                        return await resp2.json(content_type=None)
-                return await resp.json(content_type=None)
+                        return await self._parse_json(resp2, context=path)
+                if resp.status != 200:
+                    body = (await resp.text())[:300]
+                    _LOGGER.error(
+                        "%s: HTTP %s from PowerPanel Cloud: %s", path, resp.status, body,
+                    )
+                    raise PowerPanelConnectionError(f"{path}: HTTP {resp.status}: {body}")
+                return await self._parse_json(resp, context=path)
         except aiohttp.ClientError as err:
             raise PowerPanelConnectionError(str(err)) from err
 
@@ -112,7 +149,9 @@ class PowerPanelAPIClient:
             {"account": self._email, "otp": self._otp},
         )
         if not data.get("result"):
-            _LOGGER.warning("device/read/status returned result=false")
+            _LOGGER.warning(
+                "device/read/status returned result=false, full response: %s", data,
+            )
             return []
         return data.get("msg", {}).get("device_status", [])
 
@@ -123,7 +162,10 @@ class PowerPanelAPIClient:
             {"dcode": int(dcode), "otp": self._otp, "acode": self._acode},
         )
         if not data.get("result"):
-            _LOGGER.warning("device/read/details returned result=false for %s", dcode)
+            _LOGGER.warning(
+                "device/read/details returned result=false for %s, full response: %s",
+                dcode, data,
+            )
             return None
         return data.get("msg", {}).get("device_status")
 
@@ -134,6 +176,9 @@ class PowerPanelAPIClient:
             {"otp": self._otp, "acode": self._acode},
         )
         if not data.get("result"):
+            _LOGGER.warning(
+                "battery/replace/read returned result=false, full response: %s", data,
+            )
             return []
         return data.get("msg", {}).get("data", [])
 
