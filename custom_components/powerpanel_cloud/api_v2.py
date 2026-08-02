@@ -90,6 +90,11 @@ class PowerPanelPublicAPIClient:
                     raw = await resp.text()
                     if resp.status == 401:
                         last_status, last_body = resp.status, raw[:300]
+                        form = "bare key" if not auth_value.startswith("Bearer ") else "Bearer-prefixed"
+                        _LOGGER.warning(
+                            "%s: HTTP 401 with %s Authorization header, trying next form",
+                            path, form,
+                        )
                         continue  # try the alternate header form
                     if resp.status == 429:
                         raise PowerPanelConnectionError(
@@ -115,7 +120,12 @@ class PowerPanelPublicAPIClient:
                             f"{path}: non-JSON response: {raw[:300]}"
                         ) from err
             except aiohttp.ClientError as err:
+                _LOGGER.error("%s: connection error reaching public API: %s", path, err)
                 raise PowerPanelConnectionError(str(err)) from err
+        _LOGGER.error(
+            "%s: all Authorization header forms rejected with HTTP %s: %s",
+            path, last_status, last_body,
+        )
         raise PowerPanelAuthError(
             f"{path}: HTTP {last_status}: invalid API key ({last_body})"
         )
