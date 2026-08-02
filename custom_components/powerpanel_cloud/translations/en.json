@@ -3,7 +3,23 @@
     "step": {
       "user": {
         "title": "Connect to PowerPanel Cloud",
-        "description": "Enter your PowerPanel Cloud account credentials.",
+        "description": "Choose how to authenticate. The API key method uses CyberPower's official API and is recommended. Generate a key in the PowerPanel Cloud web portal under Management \u2192 API.",
+        "menu_options": {
+          "api_key": "API key (official API, recommended)",
+          "legacy": "Email & password (legacy)"
+        }
+      },
+      "api_key": {
+        "title": "Official API key",
+        "description": "Enter the API key generated in the PowerPanel Cloud web portal (Management \u2192 API). PRO accounts and regions are detected automatically.",
+        "data": {
+          "api_key": "API Key",
+          "scan_interval": "Poll Interval (seconds)"
+        }
+      },
+      "legacy": {
+        "title": "Legacy login",
+        "description": "Enter your PowerPanel Cloud account credentials. Note: accounts with two-factor authentication are not supported by the legacy method \u2014 use an API key instead.",
         "data": {
           "email": "Email Address",
           "password": "Password",
@@ -13,9 +29,10 @@
     },
     "error": {
       "invalid_auth": "Invalid email or password.",
+      "invalid_api_key": "Invalid API key. Check the key in the PowerPanel Cloud portal under Management \u2192 API.",
       "cannot_connect": "Could not connect to PowerPanel Cloud. Check your network.",
       "unknown": "An unexpected error occurred.",
-      "two_factor_unsupported": "This account has two-factor authentication enabled, which is not supported yet. Disable 2FA on the PowerPanel Cloud account to use this integration."
+      "two_factor_unsupported": "This account has two-factor authentication enabled, which the legacy method does not support. Use the API key method instead."
     },
     "abort": {
       "already_configured": "This PowerPanel Cloud account is already configured."

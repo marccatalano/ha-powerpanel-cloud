@@ -231,6 +231,29 @@ class PowerPanelAPIClient:
             return []
         return data.get("msg", {}).get("data", [])
 
+    async def async_fetch_data(self) -> dict:
+        """Fetch and assemble all device data (legacy endpoints).
+
+        Produces the internal shape {dcode: {"summary": ..., "details": ...}}
+        shared with the /public/v1 client.
+        """
+        statuses = await self.get_device_status()
+        if not statuses:
+            raise PowerPanelConnectionError("No device status returned")
+
+        result: dict = {}
+        for device in statuses:
+            dcode = str(device.get("dcode", ""))
+            if not dcode:
+                continue
+            try:
+                details = await self.get_device_details(dcode)
+            except PowerPanelConnectionError as err:
+                _LOGGER.warning("Failed to get details for device %s: %s", dcode, err)
+                details = None
+            result[dcode] = {"summary": device, "details": details or {}}
+        return result
+
     @property
     def devices(self) -> list[dict]:
         """Return device list from last login."""

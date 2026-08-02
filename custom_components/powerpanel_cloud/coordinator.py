@@ -7,7 +7,7 @@ from datetime import timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import PowerPanelAPIClient, PowerPanelConnectionError
+from .api import PowerPanelConnectionError
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class PowerPanelCoordinator(DataUpdateCoordinator):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: PowerPanelAPIClient,
+        client,  # PowerPanelAPIClient | PowerPanelPublicAPIClient
         scan_interval: int,
     ) -> None:
         self.client = client
@@ -31,32 +31,8 @@ class PowerPanelCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self) -> dict:
-        """Fetch data for all devices."""
+        """Fetch data for all devices via the configured client."""
         try:
-            # Get summary status for all devices in one call
-            statuses = await self.client.get_device_status()
+            return await self.client.async_fetch_data()
         except PowerPanelConnectionError as err:
             raise UpdateFailed(f"Connection error: {err}") from err
-
-        if not statuses:
-            raise UpdateFailed("No device status returned")
-
-        result = {}
-        for device in statuses:
-            dcode = str(device.get("dcode", ""))
-            if not dcode:
-                continue
-
-            # Get detailed telemetry for each device
-            try:
-                details = await self.client.get_device_details(dcode)
-            except PowerPanelConnectionError as err:
-                _LOGGER.warning("Failed to get details for device %s: %s", dcode, err)
-                details = None
-
-            result[dcode] = {
-                "summary": device,
-                "details": details or {},
-            }
-
-        return result
