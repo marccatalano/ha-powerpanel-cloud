@@ -146,7 +146,7 @@ class PowerPanelAPIClient:
         """Get status for all devices (battery %, load, runtime)."""
         data = await self._post(
             "/device/read/status",
-            {"account": self._email, "otp": self._otp},
+            {"account": self._email, "otp": self._otp, "acode": self._acode},
         )
         if not data.get("result"):
             _LOGGER.warning(
