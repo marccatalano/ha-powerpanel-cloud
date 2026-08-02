@@ -28,6 +28,10 @@ class PowerPanelAuthError(Exception):
     """Authentication failed."""
 
 
+class PowerPanelTwoFactorError(PowerPanelAuthError):
+    """Account has two-factor authentication enabled, which is not yet supported."""
+
+
 class PowerPanelConnectionError(Exception):
     """Connection failed."""
 
@@ -67,14 +71,50 @@ class PowerPanelAPIClient:
         if not data.get("Flag"):
             raise PowerPanelAuthError("Invalid credentials")
 
+        devices = data.get("DevicesInfor") or []
+
+        # Sanitized shape of the login response — no tokens/keys, just which
+        # fields are present. This is the single log line needed to diagnose
+        # account-specific failures (issue #1).
+        _LOGGER.info(
+            "Login response shape: EnableOtp=%s IsMsp=%s RegionId=%s "
+            "token_present=%s otpkey_present=%s acode_present=%s devices=%d",
+            data.get("EnableOtp"),
+            data.get("IsMsp"),
+            data.get("RegionId"),
+            bool(data.get("token")),
+            bool(data.get("OtpKey")),
+            data.get("acode") is not None,
+            len(devices),
+        )
+
+        # The PowerPanel web app branches into a second verification step
+        # (/authotp/check) when EnableOtp is true. Without that step the
+        # session is not fully activated and subsequent iotapi calls fail.
+        if data.get("EnableOtp"):
+            raise PowerPanelTwoFactorError(
+                "This PowerPanel Cloud account has two-factor authentication "
+                "enabled, which this integration does not support yet. "
+                "Disable 2FA on the account or wait for 2FA support."
+            )
+
         self._token = data.get("token")
         self._otp = data.get("OtpKey")
-        self._acode = data.get("PackageId")  # acode is AccountId from DevicesInfor
-        # Extract acode from first device entry
-        devices = data.get("DevicesInfor", [])
-        if devices:
-            self._acode = devices[0].get("AccountId")
-            self._devices = devices
+        self._devices = devices
+
+        # The web app reads acode directly from the login response
+        # (acode: Number(e.acode)) — not from DevicesInfor[0].AccountId.
+        raw_acode = data.get("acode")
+        if raw_acode is not None:
+            try:
+                self._acode = int(raw_acode)
+            except (TypeError, ValueError):
+                _LOGGER.warning("Unparseable acode in login response: %r", raw_acode)
+                self._acode = None
+        else:
+            _LOGGER.warning("Login response contained no acode field")
+            self._acode = None
+
         _LOGGER.debug("Authenticated, acode=%s, devices=%d", self._acode, len(devices))
         return True
 
@@ -134,8 +174,14 @@ class PowerPanelAPIClient:
                         return await self._parse_json(resp2, context=path)
                 if resp.status != 200:
                     body = (await resp.text())[:300]
+                    # Field names + whether each was populated — never values.
+                    field_shape = {
+                        k: "set" if v not in (None, "") else "MISSING"
+                        for k, v in payload.items()
+                    }
                     _LOGGER.error(
-                        "%s: HTTP %s from PowerPanel Cloud: %s", path, resp.status, body,
+                        "%s: HTTP %s from PowerPanel Cloud (payload fields: %s): %s",
+                        path, resp.status, field_shape, body,
                     )
                     raise PowerPanelConnectionError(f"{path}: HTTP {resp.status}: {body}")
                 return await self._parse_json(resp, context=path)
@@ -144,9 +190,12 @@ class PowerPanelAPIClient:
 
     async def get_device_status(self) -> list[dict]:
         """Get status for all devices (battery %, load, runtime)."""
+        # Payload verified against the PowerPanel web app bundle: it sends
+        # exactly {account, otp} (plus RegionIds only for MSP region filters).
+        # No acode — the beta.2 addition was incorrect and is reverted.
         data = await self._post(
             "/device/read/status",
-            {"account": self._email, "otp": self._otp, "acode": self._acode},
+            {"account": self._email, "otp": self._otp},
         )
         if not data.get("result"):
             _LOGGER.warning(

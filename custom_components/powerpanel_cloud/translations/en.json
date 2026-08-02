@@ -14,7 +14,8 @@
     "error": {
       "invalid_auth": "Invalid email or password.",
       "cannot_connect": "Could not connect to PowerPanel Cloud. Check your network.",
-      "unknown": "An unexpected error occurred."
+      "unknown": "An unexpected error occurred.",
+      "two_factor_unsupported": "This account has two-factor authentication enabled, which is not supported yet. Disable 2FA on the PowerPanel Cloud account to use this integration."
     },
     "abort": {
       "already_configured": "This PowerPanel Cloud account is already configured."

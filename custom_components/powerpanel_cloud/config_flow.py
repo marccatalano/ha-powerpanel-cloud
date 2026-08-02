@@ -12,7 +12,12 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import PowerPanelAPIClient, PowerPanelAuthError, PowerPanelConnectionError
+from .api import (
+    PowerPanelAPIClient,
+    PowerPanelAuthError,
+    PowerPanelConnectionError,
+    PowerPanelTwoFactorError,
+)
 from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,6 +58,8 @@ class PowerPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 info = await validate_input(self.hass, user_input)
+            except PowerPanelTwoFactorError:
+                errors["base"] = "two_factor_unsupported"
             except PowerPanelAuthError:
                 errors["base"] = "invalid_auth"
             except PowerPanelConnectionError:
