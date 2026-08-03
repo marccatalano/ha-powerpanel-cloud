@@ -163,10 +163,15 @@ class PowerPanelPublicAPIClient:
         return data if isinstance(data, list) else []
 
     async def get_device_status(self) -> list[dict]:
+        body = self._body()
         data = await self._request(
-            "POST", "/devices/status/read", self._body()
+            "POST", "/devices/status/read", body
         )
         if not isinstance(data, dict):
+            _LOGGER.warning(
+                "devices/status/read: non-dict response with body %s: %r",
+                body, data,
+            )
             return []
         devices: list[dict] = []
         for group in ("DeviceStatus", "SharedDevices", "SharedGroupDevices"):
@@ -174,6 +179,19 @@ class PowerPanelPublicAPIClient:
             if isinstance(entries, dict):  # schema says object, example says array
                 entries = [entries]
             devices.extend(e for e in entries if isinstance(e, dict))
+        if not devices:
+            # A 200 with zero devices across all three arrays is a valid API
+            # response, not an error — but it's not actionable on our side.
+            # Log the sent body and the raw (already-authenticated, non-secret)
+            # response shape so it's clear whether the backend is returning
+            # empty arrays, null keys, or something outside the documented
+            # schema, without another round-trip through the user.
+            _LOGGER.warning(
+                "devices/status/read: 200 OK but no devices in any of "
+                "DeviceStatus/SharedDevices/SharedGroupDevices. Sent body: %s. "
+                "Response keys: %s. Full response: %s",
+                body, list(data.keys()), data,
+            )
         return devices
 
     async def get_device_detail(self, sn: str) -> dict | None:
