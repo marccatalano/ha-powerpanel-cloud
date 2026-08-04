@@ -44,6 +44,22 @@ _DETAIL_FIELD_MAP = {
     "FirmwareVersion": "FV",
     "UpsTemperature": "UpsTemperature",  # v2-only sensor
 }
+# Legacy-shaped status entry (lowercase keys), as actually returned by the
+# backend for at least some accounts — see get_device_status() for context.
+# Unlike the documented shape, these entries already carry full telemetry, so
+# no separate detail call is needed when this shape is seen.
+_LEGACY_SHAPE_DETAIL_MAP = {
+    "BHI": "BHI",
+    "Load": "LoadPct",  # observed values (0-100) read as load %, not watts;
+                         # unconfirmed against CyberPower docs, revisit if a
+                         # unit mismatch shows up in reported sensor values
+}
+_LEGACY_SHAPE_SUMMARY_MAP = {
+    "BatCap": "BatCap",
+    "BatRun": "BatRun",
+    "BatSta": "BatSta",
+}
+# Documented-shape summary fields, from the separate detail call.
 _SUMMARY_FIELD_MAP = {
     "BatteryCapacity": "BatCap",
     "BatteryRuntime": "BatRun",
@@ -173,23 +189,46 @@ class PowerPanelPublicAPIClient:
                 body, data,
             )
             return []
+
         devices: list[dict] = []
-        for group in ("DeviceStatus", "SharedDevices", "SharedGroupDevices"):
-            entries = data.get(group) or []
-            if isinstance(entries, dict):  # schema says object, example says array
-                entries = [entries]
-            devices.extend(e for e in entries if isinstance(e, dict))
+
+        # Real-world shape observed on a PRO/MSP account (issue #1): the
+        # backend wraps the payload as {"result": bool, "msg": {...}} and uses
+        # lowercase, legacy-style field names (device_status, dcode,
+        # device_sn, BatCap, BatRun, BHI, Load, ...) — identical in shape to
+        # the legacy reverse-engineered API's response, not the documented
+        # OpenAPI schema (DeviceStatus/SharedDevices/SharedGroupDevices with
+        # DeviceSn/DeviceStatus/Dcode). CyberPower's backend evidently doesn't
+        # implement its own published spec for at least some accounts, so
+        # this shape is checked first since it's been seen on real traffic.
+        msg = data.get("msg")
+        if isinstance(msg, dict):
+            for group in ("device_status", "shared_devices", "shared_group_devices"):
+                entries = msg.get(group) or []
+                if isinstance(entries, dict):
+                    entries = list(entries.values()) if entries else []
+                devices.extend(e for e in entries if isinstance(e, dict))
+
+        # Documented spec shape, checked in case some accounts really do get
+        # this instead (kept as-is from prior betas).
         if not devices:
-            # A 200 with zero devices across all three arrays is a valid API
+            for group in ("DeviceStatus", "SharedDevices", "SharedGroupDevices"):
+                entries = data.get(group) or []
+                if isinstance(entries, dict):  # schema says object, example says array
+                    entries = [entries]
+                devices.extend(e for e in entries if isinstance(e, dict))
+
+        if not devices:
+            # A 200 with zero devices across every known shape is a valid API
             # response, not an error — but it's not actionable on our side.
             # Log the sent body and the raw (already-authenticated, non-secret)
             # response shape so it's clear whether the backend is returning
-            # empty arrays, null keys, or something outside the documented
+            # empty arrays, null keys, or something outside every known
             # schema, without another round-trip through the user.
             _LOGGER.warning(
-                "devices/status/read: 200 OK but no devices in any of "
-                "DeviceStatus/SharedDevices/SharedGroupDevices. Sent body: %s. "
-                "Response keys: %s. Full response: %s",
+                "devices/status/read: 200 OK but no devices in any known "
+                "response shape. Sent body: %s. Response keys: %s. Full "
+                "response: %s",
                 body, list(data.keys()), data,
             )
         return devices
@@ -230,34 +269,56 @@ class PowerPanelPublicAPIClient:
 
         result: dict = {}
         for status in statuses:
-            sn = status.get("DeviceSn")
-            dcode = str(status.get("Dcode") or sn or "")
-            if not dcode:
-                continue
+            is_legacy_shape = "dcode" in status  # see get_device_status()
 
-            summary = {
-                "device_sn": sn,
-                # v2 enum differs from legacy; kept under its own key
-                "DeviceStatusV2": status.get("DeviceStatus"),
-                "Description": status.get("Description"),
-            }
-
-            details: dict = {}
-            if sn:
-                try:
-                    raw_detail = await self.get_device_detail(sn) or {}
-                except PowerPanelConnectionError as err:
-                    _LOGGER.warning("Detail fetch failed for %s: %s", sn, err)
-                    raw_detail = {}
-                for official, internal in _DETAIL_FIELD_MAP.items():
-                    if official in raw_detail:
-                        details[internal] = raw_detail[official]
-                for official, internal in _SUMMARY_FIELD_MAP.items():
-                    if official in raw_detail:
-                        summary[internal] = raw_detail[official]
+            if is_legacy_shape:
+                sn = status.get("device_sn")
+                dcode = str(status.get("dcode") or sn or "")
+                if not dcode:
+                    continue
+                summary = {
+                    "device_sn": sn,
+                    "DeviceStatusV2": status.get("device_status"),
+                    "Description": status.get("desc"),
+                }
+                details: dict = {}
+                for official, internal in _LEGACY_SHAPE_DETAIL_MAP.items():
+                    if official in status:
+                        details[internal] = status[official]
+                for official, internal in _LEGACY_SHAPE_SUMMARY_MAP.items():
+                    if official in status:
+                        summary[internal] = status[official]
+                # Full telemetry is already present on this shape — no
+                # separate detail call needed (saves an API call per device).
+            else:
+                sn = status.get("DeviceSn")
+                dcode = str(status.get("Dcode") or sn or "")
+                if not dcode:
+                    continue
+                summary = {
+                    "device_sn": sn,
+                    # v2 enum differs from legacy; kept under its own key
+                    "DeviceStatusV2": status.get("DeviceStatus"),
+                    "Description": status.get("Description"),
+                }
+                details = {}
+                if sn:
+                    try:
+                        raw_detail = await self.get_device_detail(sn) or {}
+                    except PowerPanelConnectionError as err:
+                        _LOGGER.warning("Detail fetch failed for %s: %s", sn, err)
+                        raw_detail = {}
+                    for official, internal in _DETAIL_FIELD_MAP.items():
+                        if official in raw_detail:
+                            details[internal] = raw_detail[official]
+                    for official, internal in _SUMMARY_FIELD_MAP.items():
+                        if official in raw_detail:
+                            summary[internal] = raw_detail[official]
 
             if names.get(sn):
                 details["DeviceName"] = names[sn]
+            elif is_legacy_shape and status.get("desc"):
+                details["DeviceName"] = status["desc"]
 
             result[dcode] = {
                 "summary": {k: v for k, v in summary.items() if v is not None},
