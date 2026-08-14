@@ -13,6 +13,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
+    UnitOfTemperature,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfFrequency,
@@ -27,6 +28,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     BATTERY_STATUS,
     DEVICE_STATUS,
+    DEVICE_STATUS_V2,
     DOMAIN,
     MANUFACTURER,
     POWER_SOURCE,
@@ -171,6 +173,24 @@ SENSOR_DESCRIPTIONS: tuple[PowerPanelSensorDescription, ...] = (
         icon="mdi:power",
         value_map=DEVICE_STATUS,
     ),
+    # ── Official /public/v1 API (v2 client) ───────────────────────────────────
+    # The v2 status enum differs from the legacy one, so it lives under its
+    # own key/map instead of being coerced into the legacy codes.
+    PowerPanelSensorDescription(
+        key="DeviceStatusV2",
+        name="Device Status",
+        source="summary",
+        icon="mdi:power",
+        value_map=DEVICE_STATUS_V2,
+    ),
+    PowerPanelSensorDescription(
+        key="UpsTemperature",
+        name="Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        source="details",
+    ),
 )
 
 
@@ -259,8 +279,13 @@ class PowerPanelSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
+        summary = self._device_data.get("summary", {})
+        # Legacy client stores the raw field name "device_status"; the v2
+        # client deliberately uses "DeviceStatusV2" since its enum differs
+        # (see api_v2.py) — check whichever key this entry's summary has.
+        status = summary.get("DeviceStatusV2", summary.get("device_status"))
         return (
             super().available
             and self._dcode in self.coordinator.data
-            and self._device_data.get("summary", {}).get("device_status") == 0
+            and status == 0
         )

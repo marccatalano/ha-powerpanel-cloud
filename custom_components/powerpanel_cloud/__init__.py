@@ -9,7 +9,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import PowerPanelAPIClient, PowerPanelAuthError, PowerPanelConnectionError
-from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .api_v2 import PowerPanelPublicAPIClient
+from .const import CONF_API_KEY, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
 from .coordinator import PowerPanelCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,11 +21,17 @@ PLATFORMS = [Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up PowerPanel Cloud from a config entry."""
     session = async_get_clientsession(hass)
-    client = PowerPanelAPIClient(
-        entry.data[CONF_EMAIL],
-        entry.data[CONF_PASSWORD],
-        session,
-    )
+    if entry.data.get(CONF_API_KEY):
+        # Official /public/v1 API (API-key auth)
+        client = PowerPanelPublicAPIClient(entry.data[CONF_API_KEY], session)
+    else:
+        # Legacy reverse-engineered API (email/password); entries created
+        # before v1.2.0 land here unchanged.
+        client = PowerPanelAPIClient(
+            entry.data[CONF_EMAIL],
+            entry.data[CONF_PASSWORD],
+            session,
+        )
 
     try:
         await client.authenticate()

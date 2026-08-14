@@ -41,3 +41,16 @@ UPS_STATE = {
     6: "Converter",
     7: "Charging",
 }
+
+CONF_API_KEY = "api_key"
+CONF_AUTH_METHOD = "auth_method"
+AUTH_METHOD_API_KEY = "api_key"
+AUTH_METHOD_LEGACY = "legacy"
+
+# Official /public/v1 API device status codes (differ from legacy codes above)
+DEVICE_STATUS_V2 = {
+    0: "Normal",
+    1: "Warning",
+    2: "Critical",
+    3: "Offline",
+}

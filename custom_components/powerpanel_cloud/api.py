@@ -28,6 +28,10 @@ class PowerPanelAuthError(Exception):
     """Authentication failed."""
 
 
+class PowerPanelTwoFactorError(PowerPanelAuthError):
+    """Account has two-factor authentication enabled, which is not yet supported."""
+
+
 class PowerPanelConnectionError(Exception):
     """Connection failed."""
 
@@ -60,21 +64,57 @@ class PowerPanelAPIClient:
             ) as resp:
                 if resp.status != 200:
                     raise PowerPanelAuthError(f"HTTP {resp.status}")
-                data = await resp.json(content_type=None)
+                data = await self._parse_json(resp, context="authenticate")
         except aiohttp.ClientError as err:
             raise PowerPanelConnectionError(str(err)) from err
 
         if not data.get("Flag"):
             raise PowerPanelAuthError("Invalid credentials")
 
+        devices = data.get("DevicesInfor") or []
+
+        # Sanitized shape of the login response — no tokens/keys, just which
+        # fields are present. This is the single log line needed to diagnose
+        # account-specific failures (issue #1).
+        _LOGGER.info(
+            "Login response shape: EnableOtp=%s IsMsp=%s RegionId=%s "
+            "token_present=%s otpkey_present=%s acode_present=%s devices=%d",
+            data.get("EnableOtp"),
+            data.get("IsMsp"),
+            data.get("RegionId"),
+            bool(data.get("token")),
+            bool(data.get("OtpKey")),
+            data.get("acode") is not None,
+            len(devices),
+        )
+
+        # The PowerPanel web app branches into a second verification step
+        # (/authotp/check) when EnableOtp is true. Without that step the
+        # session is not fully activated and subsequent iotapi calls fail.
+        if data.get("EnableOtp"):
+            raise PowerPanelTwoFactorError(
+                "This PowerPanel Cloud account has two-factor authentication "
+                "enabled, which this integration does not support yet. "
+                "Disable 2FA on the account or wait for 2FA support."
+            )
+
         self._token = data.get("token")
         self._otp = data.get("OtpKey")
-        self._acode = data.get("PackageId")  # acode is AccountId from DevicesInfor
-        # Extract acode from first device entry
-        devices = data.get("DevicesInfor", [])
-        if devices:
-            self._acode = devices[0].get("AccountId")
-            self._devices = devices
+        self._devices = devices
+
+        # The web app reads acode directly from the login response
+        # (acode: Number(e.acode)) — not from DevicesInfor[0].AccountId.
+        raw_acode = data.get("acode")
+        if raw_acode is not None:
+            try:
+                self._acode = int(raw_acode)
+            except (TypeError, ValueError):
+                _LOGGER.warning("Unparseable acode in login response: %r", raw_acode)
+                self._acode = None
+        else:
+            _LOGGER.warning("Login response contained no acode field")
+            self._acode = None
+
         _LOGGER.debug("Authenticated, acode=%s, devices=%d", self._acode, len(devices))
         return True
 
@@ -83,6 +123,37 @@ class PowerPanelAPIClient:
             "Authorization": f"Bearer {self._token}",
             "Content-Type": "application/json",
         }
+
+    async def _parse_json(self, resp: aiohttp.ClientResponse, *, context: str) -> dict:
+        """Parse a response body as JSON, logging enough detail to diagnose failures.
+
+        The PowerPanel Cloud API doesn't always return JSON on error (empty body,
+        an HTML/redirect page, a plain-text message, etc). Previously we called
+        resp.json() unconditionally, which threw an unhandled JSONDecodeError and
+        crashed the coordinator instead of surfacing something diagnosable.
+        """
+        raw = await resp.text()
+        if not raw.strip():
+            _LOGGER.error(
+                "%s: empty response body (HTTP %s) from %s",
+                context, resp.status, resp.url,
+            )
+            raise PowerPanelConnectionError(
+                f"{context}: empty response body (HTTP {resp.status})"
+            )
+        try:
+            # content_type=None: PowerPanel Cloud doesn't reliably send
+            # application/json, so don't let aiohttp reject on that basis.
+            return await resp.json(content_type=None)
+        except ValueError as err:
+            snippet = raw[:300]
+            _LOGGER.error(
+                "%s: non-JSON response (HTTP %s) from %s: %s",
+                context, resp.status, resp.url, snippet,
+            )
+            raise PowerPanelConnectionError(
+                f"{context}: non-JSON response (HTTP {resp.status}): {snippet}"
+            ) from err
 
     async def _post(self, path: str, payload: dict) -> dict:
         """POST to iotapi with Bearer token."""
@@ -100,19 +171,36 @@ class PowerPanelAPIClient:
                         json=payload,
                         headers=self._auth_headers(),
                     ) as resp2:
-                        return await resp2.json(content_type=None)
-                return await resp.json(content_type=None)
+                        return await self._parse_json(resp2, context=path)
+                if resp.status != 200:
+                    body = (await resp.text())[:300]
+                    # Field names + whether each was populated — never values.
+                    field_shape = {
+                        k: "set" if v not in (None, "") else "MISSING"
+                        for k, v in payload.items()
+                    }
+                    _LOGGER.error(
+                        "%s: HTTP %s from PowerPanel Cloud (payload fields: %s): %s",
+                        path, resp.status, field_shape, body,
+                    )
+                    raise PowerPanelConnectionError(f"{path}: HTTP {resp.status}: {body}")
+                return await self._parse_json(resp, context=path)
         except aiohttp.ClientError as err:
             raise PowerPanelConnectionError(str(err)) from err
 
     async def get_device_status(self) -> list[dict]:
         """Get status for all devices (battery %, load, runtime)."""
+        # Payload verified against the PowerPanel web app bundle: it sends
+        # exactly {account, otp} (plus RegionIds only for MSP region filters).
+        # No acode — the beta.2 addition was incorrect and is reverted.
         data = await self._post(
             "/device/read/status",
             {"account": self._email, "otp": self._otp},
         )
         if not data.get("result"):
-            _LOGGER.warning("device/read/status returned result=false")
+            _LOGGER.warning(
+                "device/read/status returned result=false, full response: %s", data,
+            )
             return []
         return data.get("msg", {}).get("device_status", [])
 
@@ -123,7 +211,10 @@ class PowerPanelAPIClient:
             {"dcode": int(dcode), "otp": self._otp, "acode": self._acode},
         )
         if not data.get("result"):
-            _LOGGER.warning("device/read/details returned result=false for %s", dcode)
+            _LOGGER.warning(
+                "device/read/details returned result=false for %s, full response: %s",
+                dcode, data,
+            )
             return None
         return data.get("msg", {}).get("device_status")
 
@@ -134,8 +225,34 @@ class PowerPanelAPIClient:
             {"otp": self._otp, "acode": self._acode},
         )
         if not data.get("result"):
+            _LOGGER.warning(
+                "battery/replace/read returned result=false, full response: %s", data,
+            )
             return []
         return data.get("msg", {}).get("data", [])
+
+    async def async_fetch_data(self) -> dict:
+        """Fetch and assemble all device data (legacy endpoints).
+
+        Produces the internal shape {dcode: {"summary": ..., "details": ...}}
+        shared with the /public/v1 client.
+        """
+        statuses = await self.get_device_status()
+        if not statuses:
+            raise PowerPanelConnectionError("No device status returned")
+
+        result: dict = {}
+        for device in statuses:
+            dcode = str(device.get("dcode", ""))
+            if not dcode:
+                continue
+            try:
+                details = await self.get_device_details(dcode)
+            except PowerPanelConnectionError as err:
+                _LOGGER.warning("Failed to get details for device %s: %s", dcode, err)
+                details = None
+            result[dcode] = {"summary": device, "details": details or {}}
+        return result
 
     @property
     def devices(self) -> list[dict]:
