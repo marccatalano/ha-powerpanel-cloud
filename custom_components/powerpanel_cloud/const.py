@@ -54,3 +54,19 @@ DEVICE_STATUS_V2 = {
     2: "Critical",
     3: "Offline",
 }
+
+# The only status codes that mean "device unreachable". Every other code
+# (Warning/Critical — e.g. running on battery) is a reachable device with an
+# active alert, and its entities must stay available so that state is visible.
+DEVICE_STATUS_OFFLINE = 1
+DEVICE_STATUS_V2_OFFLINE = 3
+
+# Legacy device_status code -> v2 DeviceStatusV2 code. Used when the public API
+# returns the legacy-shaped payload (lowercase keys, seen on PRO/MSP accounts in
+# issue #1), whose device_status follows the legacy enum. Unknown codes pass
+# through unchanged.
+LEGACY_TO_V2_DEVICE_STATUS = {
+    0: 0,  # Online  -> Normal
+    1: 3,  # Offline -> Offline
+    2: 1,  # Warning -> Warning
+}

@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.1] - 2026-09-23
+
+### Fixed
+- Entities no longer go unavailable while a UPS is on battery or has any other
+  active alert. Availability previously required device status to be exactly
+  Online/Normal, so Warning/Critical states (including utility power failure)
+  hid every entity and Power Source / UPS State never showed Battery. Now only
+  an Offline device is treated as unavailable. (#4)
+- API-key entries on accounts that return the legacy-shaped status payload now
+  translate its legacy status codes into the v2 enum, so the Device Status
+  sensor shows the correct label (Offline was shown as Warning, Warning as
+  Critical).
+
 ## [1.0.0] - 2026-05-02
 
 ### Added
