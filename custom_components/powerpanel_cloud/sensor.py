@@ -30,7 +30,6 @@ from .const import (
     DEVICE_STATUS,
     DEVICE_STATUS_OFFLINE,
     DEVICE_STATUS_V2,
-    DEVICE_STATUS_V2_OFFLINE,
     DOMAIN,
     MANUFACTURER,
     POWER_SOURCE,
@@ -282,17 +281,12 @@ class PowerPanelSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         summary = self._device_data.get("summary", {})
-        # Only an Offline device is unavailable. Warning/Critical (e.g. on
-        # battery) are reachable devices with an alert; hiding their entities
-        # would hide exactly the state a UPS integration exists to report
-        # (issue #4). The legacy client stores "device_status" (legacy enum);
-        # the v2 client stores "DeviceStatusV2" (v2 enum, see api_v2.py).
-        if "DeviceStatusV2" in summary:
-            offline = summary["DeviceStatusV2"] == DEVICE_STATUS_V2_OFFLINE
-        else:
-            offline = summary.get("device_status") == DEVICE_STATUS_OFFLINE
+        # The legacy client stores "device_status", the v2 client
+        # "DeviceStatusV2"; both carry the same enum. Only Offline makes the
+        # entities unavailable (issue #4).
+        status = summary.get("DeviceStatusV2", summary.get("device_status"))
         return (
             super().available
             and self._dcode in self.coordinator.data
-            and not offline
+            and status != DEVICE_STATUS_OFFLINE
         )

@@ -27,7 +27,6 @@ from typing import Any
 import aiohttp
 
 from .api import PowerPanelAuthError, PowerPanelConnectionError
-from .const import LEGACY_TO_V2_DEVICE_STATUS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -279,12 +278,7 @@ class PowerPanelPublicAPIClient:
                     continue
                 summary = {
                     "device_sn": sn,
-                    # This shape carries the legacy status enum; translate it so
-                    # DeviceStatusV2 always holds v2 codes (issue #4). Kept on
-                    # the DeviceStatusV2 key so existing entity IDs don't change.
-                    "DeviceStatusV2": LEGACY_TO_V2_DEVICE_STATUS.get(
-                        status.get("device_status"), status.get("device_status")
-                    ),
+                    "DeviceStatusV2": status.get("device_status"),
                     "Description": status.get("desc"),
                 }
                 details: dict = {}
@@ -303,7 +297,8 @@ class PowerPanelPublicAPIClient:
                     continue
                 summary = {
                     "device_sn": sn,
-                    # v2 enum differs from legacy; kept under its own key
+                    # Same enum as legacy device_status; kept under its own
+                    # key so existing API-key entity IDs don't change.
                     "DeviceStatusV2": status.get("DeviceStatus"),
                     "Description": status.get("Description"),
                 }
