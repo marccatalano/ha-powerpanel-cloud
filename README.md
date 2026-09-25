@@ -1,7 +1,7 @@
 # CyberPower PowerPanel Cloud — Home Assistant Integration
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/marccatalano/ha-powerpanel-cloud/releases)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz)
+[![Release](https://img.shields.io/github/v/release/marccatalano/ha-powerpanel-cloud)](https://github.com/marccatalano/ha-powerpanel-cloud/releases/latest)
 [![HA Minimum](https://img.shields.io/badge/HA-2024.1.0+-green.svg)](https://www.home-assistant.io)
 
 A Home Assistant custom integration that pulls live UPS telemetry from [CyberPower PowerPanel Cloud](https://powerpanel.cyberpower.com) into Home Assistant via the cloud API.
