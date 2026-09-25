@@ -40,6 +40,8 @@ _DETAIL_FIELD_MAP = {
     "BatteryHealthIndex": "BHI",
     "PowerRating": "RatPow",
     "PowerSource": "PowSour",
+    "InputStatus": "InSta",
+    "OutputStatus": "OutSta",
     "ModelName": "Model",
     "FirmwareVersion": "FV",
     "UpsTemperature": "UpsTemperature",  # v2-only sensor

@@ -23,19 +23,19 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     BATTERY_STATUS,
     DEVICE_STATUS,
-    DEVICE_STATUS_OFFLINE,
     DEVICE_STATUS_V2,
     DOMAIN,
-    MANUFACTURER,
+    INPUT_STATUS,
+    OUTPUT_STATUS,
     POWER_SOURCE,
     UPS_STATE,
 )
 from .coordinator import PowerPanelCoordinator
+from .entity import PowerPanelEntity, build_device_info
 
 
 @dataclass
@@ -121,11 +121,14 @@ SENSOR_DESCRIPTIONS: tuple[PowerPanelSensorDescription, ...] = (
         source="details",
     ),
     PowerPanelSensorDescription(
+        # Deprecated (#6): unsourced field that can read Online on battery.
+        # Disabled by default for new installs; existing entities unchanged.
         key="upsState",
         name="UPS State",
         source="details",
         icon="mdi:power-plug",
         value_map=UPS_STATE,
+        entity_registry_enabled_default=False,
     ),
     PowerPanelSensorDescription(
         key="PowSour",
@@ -133,6 +136,20 @@ SENSOR_DESCRIPTIONS: tuple[PowerPanelSensorDescription, ...] = (
         source="details",
         icon="mdi:transmission-tower",
         value_map=POWER_SOURCE,
+    ),
+    PowerPanelSensorDescription(
+        key="InSta",
+        name="Input Status",
+        source="details",
+        icon="mdi:sine-wave",
+        value_map=INPUT_STATUS,
+    ),
+    PowerPanelSensorDescription(
+        key="OutSta",
+        name="Output Status",
+        source="details",
+        icon="mdi:power-socket",
+        value_map=OUTPUT_STATUS,
     ),
     PowerPanelSensorDescription(
         key="RatPow",
@@ -207,20 +224,7 @@ async def async_setup_entry(
     for dcode, device_data in coordinator.data.items():
         summary = device_data.get("summary", {})
         details = device_data.get("details", {})
-
-        device_name = details.get("DeviceName") or summary.get("device_sn", dcode)
-        model = details.get("Model") or summary.get("Model", "CyberPower UPS")
-        serial = summary.get("device_sn", dcode)
-        firmware = details.get("FV", "")
-
-        device_info = DeviceInfo(
-            identifiers={(DOMAIN, dcode)},
-            name=device_name,
-            manufacturer=MANUFACTURER,
-            model=model,
-            serial_number=serial,
-            sw_version=firmware,
-        )
+        device_info = build_device_info(dcode, device_data)
 
         for description in SENSOR_DESCRIPTIONS:
             # Only create sensor if the key exists in the data source
@@ -240,7 +244,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class PowerPanelSensor(CoordinatorEntity, SensorEntity):
+class PowerPanelSensor(PowerPanelEntity, SensorEntity):
     """A sensor for a PowerPanel Cloud UPS device."""
 
     entity_description: PowerPanelSensorDescription
@@ -252,16 +256,8 @@ class PowerPanelSensor(CoordinatorEntity, SensorEntity):
         dcode: str,
         device_info: DeviceInfo,
     ) -> None:
-        super().__init__(coordinator)
+        super().__init__(coordinator, dcode, device_info, description.key, description.name)
         self.entity_description = description
-        self._dcode = dcode
-        self._attr_device_info = device_info
-        self._attr_unique_id = f"{DOMAIN}_{dcode}_{description.key}"
-        self._attr_name = f"{device_info['name']} {description.name}"
-
-    @property
-    def _device_data(self) -> dict[str, Any]:
-        return self.coordinator.data.get(self._dcode, {})
 
     @property
     def native_value(self) -> Any:
@@ -273,20 +269,7 @@ class PowerPanelSensor(CoordinatorEntity, SensorEntity):
             return None
 
         value_map = self.entity_description.value_map
-        if value_map is not None:
+        if value_map is not None and isinstance(raw, int):
             return value_map.get(raw, raw)
 
         return raw
-
-    @property
-    def available(self) -> bool:
-        summary = self._device_data.get("summary", {})
-        # The legacy client stores "device_status", the v2 client
-        # "DeviceStatusV2"; both carry the same enum. Only Offline makes the
-        # entities unavailable (issue #4).
-        status = summary.get("DeviceStatusV2", summary.get("device_status"))
-        return (
-            super().available
-            and self._dcode in self.coordinator.data
-            and status != DEVICE_STATUS_OFFLINE
-        )
