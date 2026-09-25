@@ -62,6 +62,12 @@ Supports all CyberPower UPS units connected to PowerPanel Cloud via the **RCCARD
 
 All UPS devices on your account will be discovered and created automatically as HA devices.
 
+### Choosing a poll interval
+
+The RCCARD uploads to PowerPanel Cloud roughly every 5 minutes on mains power. On a power event it uploads immediately, then about once a minute until power is restored. The default 60-second poll therefore catches outages and restores within about a minute; polling faster than 60 seconds gains nothing, and longer intervals delay outage detection by up to the interval.
+
+While a UPS is on battery, **Power Source** reads `Battery` and **Device Status** reads `Warning`; these are the reliable on-battery signals. (Some cards keep **UPS State** at `Online` during an outage.)
+
 ---
 
 ## Sensors

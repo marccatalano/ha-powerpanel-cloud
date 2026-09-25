@@ -28,6 +28,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     BATTERY_STATUS,
     DEVICE_STATUS,
+    DEVICE_STATUS_OFFLINE,
     DEVICE_STATUS_V2,
     DOMAIN,
     MANUFACTURER,
@@ -280,12 +281,12 @@ class PowerPanelSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         summary = self._device_data.get("summary", {})
-        # Legacy client stores the raw field name "device_status"; the v2
-        # client deliberately uses "DeviceStatusV2" since its enum differs
-        # (see api_v2.py) — check whichever key this entry's summary has.
+        # The legacy client stores "device_status", the v2 client
+        # "DeviceStatusV2"; both carry the same enum. Only Offline makes the
+        # entities unavailable (issue #4).
         status = summary.get("DeviceStatusV2", summary.get("device_status"))
         return (
             super().available
             and self._dcode in self.coordinator.data
-            and status == 0
+            and status != DEVICE_STATUS_OFFLINE
         )

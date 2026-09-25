@@ -297,7 +297,8 @@ class PowerPanelPublicAPIClient:
                     continue
                 summary = {
                     "device_sn": sn,
-                    # v2 enum differs from legacy; kept under its own key
+                    # Same enum as legacy device_status; kept under its own
+                    # key so existing API-key entity IDs don't change.
                     "DeviceStatusV2": status.get("DeviceStatus"),
                     "Description": status.get("Description"),
                 }

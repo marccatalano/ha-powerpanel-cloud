@@ -33,6 +33,13 @@ class PowerPanelCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         """Fetch data for all devices via the configured client."""
         try:
-            return await self.client.async_fetch_data()
+            data = await self.client.async_fetch_data()
         except PowerPanelConnectionError as err:
             raise UpdateFailed(f"Connection error: {err}") from err
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            for dcode, device in data.items():
+                _LOGGER.debug(
+                    "Poll %s: summary=%s details=%s",
+                    dcode, device.get("summary"), device.get("details"),
+                )
+        return data
