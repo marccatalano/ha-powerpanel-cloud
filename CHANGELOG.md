@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.2.1] - unreleased
+## [1.2.1] - 2026-09-24
 
 ### Fixed
 - Entities no longer go unavailable while a UPS is on battery or has any other
