@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.3.0] - unreleased
+## [1.3.0] - 2026-09-26
 
 ### Added
 - **On Battery** binary sensor per UPS: on while the load is running from

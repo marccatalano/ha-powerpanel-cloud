@@ -68,6 +68,8 @@ The RCCARD uploads to PowerPanel Cloud roughly every 5 minutes on mains power. O
 
 While a UPS is on battery, **Power Source** reads `Battery` and **Device Status** reads `Warning`; these are the reliable on-battery signals. **On Battery** turns on at the same moment. (**UPS State** is deprecated and can stay `Online` during an outage.)
 
+Use **On Battery** or **Power Source** to trigger outage and power-restored automations, not **Battery Status**. The card can report `Discharging` for one more upload after mains returns, while everything else already reads normal.
+
 ---
 
 ## Sensors
@@ -97,7 +99,9 @@ Each UPS device exposes the following entities:
 
 It also exposes an **On Battery** binary sensor, which is on while the UPS is running its load from battery.
 
-Status values use CyberPower's own labels. **Input Status** is `Normal` on healthy mains and `Power Anomaly` during an outage; it also reports `Under Voltage`, `Over Voltage`, `Frequency Failure` and `Generator`. **Output Status** is `Normal` in regular operation and reports conditions such as `Overload`, `Bypass`, `Eco Mode` and `No Output`.
+Status values use CyberPower's own labels. **Input Status** is `Normal` on healthy mains and `Power Anomaly` during an outage; it also reports `Under Voltage`, `Over Voltage`, `Frequency Failure` and `Generator`. **Output Status** is `Normal` in regular operation and reports conditions such as `Overload`, `Bypass`, `Eco Mode` and `No Output`. It stays `Normal` on battery, because the UPS is still delivering normal output.
+
+Labels follow CyberPower's PowerPanel Cloud web app. The PowerPanel mobile app words some codes differently; for example, it shows Input Status code 0 as "Power outage" rather than "Power Anomaly".
 
 **UPS State is deprecated.** CyberPower doesn't define the field it reads, and it can stay `Online` during an outage. Existing installs keep the entity; new installs have it disabled. Use **On Battery**, **Power Source** or **Input Status** instead.
 
