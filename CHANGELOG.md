@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.1] - 2026-09-26
+
+### Fixed
+- `brand/icon@2x.png` is now a true 512×512 hDPI icon (was a 256×256
+  duplicate), rendered from the vector wordmark. Sharper logo in Home
+  Assistant on high-DPI displays.
+
+### Note
+- The HACS store may still show "icon not available". This is a HACS
+  frontend limitation (hacs/integration#5223): HACS still loads icons from
+  the legacy brands CDN rather than the in-integration `brand/` folder
+  supported since HA 2026.3. The icon displays correctly in Settings →
+  Devices & Services.
+
 ## [1.3.0] - 2026-09-26
 
 ### Added
