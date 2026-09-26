@@ -15,7 +15,7 @@ from .coordinator import PowerPanelCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.3.0] - 2026-09-26
+
+### Added
+- **On Battery** binary sensor per UPS: on while the load is running from
+  battery (Power Source = Battery). The simplest trigger for outage
+  automations. (#6)
+- **Input Status** sensor (Normal, Power Anomaly, Under Voltage, Over Voltage,
+  Frequency Failure, Generator). Reads Power Anomaly during a utility failure
+  and also reports brownouts and over-voltage. (#6)
+- **Output Status** sensor (Normal, Overload, Voltage Buck/Boost, Bypass
+  modes, Eco Mode, No Output, Output Short Circuit, and others).
+- API-key entries now receive input and output status as well.
+
+### Deprecated
+- **UPS State**: its source field is not defined by CyberPower and can read
+  Online while on battery. Existing entities keep working; new installs get it
+  disabled by default. Use On Battery, Power Source or Input Status instead.
+  It will be removed in a future major release. (#6)
+
+### Fixed
+- Status sensors no longer error if a 3-phase UPS reports a list of codes; the
+  raw value is shown instead.
+
 ## [1.2.1] - 2026-09-24
 
 ### Fixed

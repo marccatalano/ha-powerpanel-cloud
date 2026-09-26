@@ -50,8 +50,46 @@ POWER_SOURCE = {
     2: "None",
     3: "Bypass",
 }
+POWER_SOURCE_BATTERY = 1
+
+# Input status ("InSta"; public API "InputStatus"). Single-phase models;
+# 3-phase UPSes report per-phase arrays that are passed through raw.
+INPUT_STATUS = {
+    0: "Power Anomaly",
+    1: "Under Voltage",
+    2: "Over Voltage",
+    3: "Frequency Failure",
+    4: "Normal",
+    5: "Generator",
+}
+
+# Output status ("OutSta"; public API "OutputStatus").
+OUTPUT_STATUS = {
+    0: "No Output",
+    1: "Overload",
+    2: "Voltage Buck",
+    3: "Voltage Boost",
+    4: "Bypass",
+    5: "Bypass UPS Abnormal",
+    6: "Bypass Overload",
+    7: "Manual Bypass",
+    8: "Eco Mode",
+    9: "Normal",
+    10: "Bypass Wrong Phase Sequence",
+    11: "Bypass Power Failure",
+    12: "Bypass Extended Overload",
+    13: "Bypass Frequency Failure",
+    14: "Bypass Fan Failure",
+    15: "EPO Mode",
+    16: "Insufficient Inverter Power",
+    17: "Output Short Circuit",
+}
 
 # UPS state codes
+# UPS state ("upsState", legacy client only). DEPRECATED: no CyberPower source
+# defines this field — their web app never reads it and the OpenAPI spec
+# omits it — and it was observed to stay 0 during a real outage (#6). Kept
+# for existing installs; disabled by default for new ones.
 UPS_STATE = {
     0: "Online",
     1: "On Battery",
